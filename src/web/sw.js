@@ -1,5 +1,5 @@
 // N.O.V.A — Service Worker for PWA
-const CACHE_NAME = 'nova-v1';
+const CACHE_NAME = 'nova-v2';
 const STATIC_ASSETS = [
     '/',
     '/dashboard',
