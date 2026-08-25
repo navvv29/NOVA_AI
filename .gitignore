@@ -1,0 +1,29 @@
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Application data - NEVER commit these
+nova_todos.json
+nova_flashcards.json
+nova_analytics.db
+nova_learning_profile.json
+nova_growth.json
+nova_security.json
+nova_memory.db
+jarvis_todos.json
+jarvis_flashcards.json
+jarvis_analytics.db
+jarvis_memory.db
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# Freebuff internal
+.freebuff/
+.pytest_cache/
+*.log

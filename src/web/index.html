@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+    <title>N.O.V.A — AI Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --text-primary: #e8e8f0;
+            --text-secondary: #9090a0;
+            --accent: #00d4ff;
+            --accent-dim: #00a0cc;
+            --user-bg: #1a2a3a;
+            --assistant-bg: #1a1a25;
+            --border: #2a2a35;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4444;
+            --purple: #a855f7;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), #0066ff);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        .title { font-size: 16px; font-weight: 600; }
+        .status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+        .status-dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
+        .status-dot.offline { background: var(--text-secondary); animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .header-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px; border-radius: 8px;
+            cursor: pointer; font-size: 12px; transition: all 0.2s;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn:hover { background: var(--border); color: var(--text-primary); }
+        .btn.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
+        .btn-icon { padding: 6px 8px; font-size: 14px; }
+        .btn-danger { border-color: var(--error); color: var(--error); }
+
+        /* Chat Area */
+        .chat-container {
+            flex: 1; overflow-y: auto; padding: 16px;
+            scroll-behavior: smooth;
+        }
+        .chat-container::-webkit-scrollbar { width: 5px; }
+        .chat-container::-webkit-scrollbar-track { background: transparent; }
+        .chat-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .message { margin-bottom: 16px; display: flex; gap: 10px; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { flex-direction: row-reverse; }
+
+        .avatar {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; flex-shrink: 0;
+        }
+        .message.user .avatar { background: linear-gradient(135deg, #0066ff, #00aaff); }
+        .message.assistant .avatar { background: linear-gradient(135deg, var(--accent), #0066ff); }
+
+        .message-content {
+            max-width: 72%; padding: 10px 14px; border-radius: 14px;
+            line-height: 1.5; font-size: 14px; white-space: pre-wrap; word-wrap: break-word;
+        }
+        .message.user .message-content { background: var(--user-bg); border-bottom-right-radius: 4px; }
+        .message.assistant .message-content { background: var(--assistant-bg); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+        .message.system .message-content {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 12px; margin: 0 auto; max-width: 90%;
+            text-align: center; font-size: 13px;
+        }
+
+        /* Notification Toast */
+        .toast-container {
+            position: fixed; top: 60px; right: 12px; z-index: 200;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--purple);
+            border-radius: 10px;
+            padding: 10px 14px;
+            max-width: 280px;
+            animation: slideIn 0.3s ease;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .toast:hover { opacity: 0.8; }
+        .toast-title { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+        .toast-msg { font-size: 11px; color: var(--text-secondary); }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: none; padding: 10px 14px;
+            background: var(--assistant-bg); border: 1px solid var(--border);
+            border-radius: 14px; border-bottom-left-radius: 4px;
+            margin-bottom: 16px; max-width: 70%;
+        }
+        .typing-indicator.active { display: flex; gap: 6px; align-items: center; }
+        .typing-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+
+        /* Input Area */
+        .input-area {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 12px 16px;
+            flex-shrink: 0;
+        }
+        .input-wrapper { display: flex; gap: 8px; align-items: flex-end; max-width: 800px; margin: 0 auto; }
+        .input-field {
+            flex: 1; background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px; padding: 10px 14px;
+            color: var(--text-primary); font-size: 14px;
+            font-family: inherit; resize: none; max-height: 100px; line-height: 1.5;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus { outline: none; border-color: var(--accent); }
+        .input-field::placeholder { color: var(--text-secondary); }
+
+        .send-btn, .voice-btn {
+            width: 42px; height: 42px; border: none; border-radius: 12px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; flex-shrink: 0;
+        }
+        .send-btn { background: var(--accent); }
+        .send-btn:hover { background: var(--accent-dim); transform: scale(1.05); }
+        .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }
+        .send-btn svg { width: 18px; height: 18px; fill: white; }
+
+        .voice-btn { background: var(--bg-tertiary); border: 1px solid var(--border); font-size: 18px; }
+        .voice-btn:hover { border-color: var(--accent); }
+        .voice-btn.listening { background: var(--error); border-color: var(--error); animation: pulse 1s infinite; }
+
+        /* Quick Actions */
+        .quick-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .quick-btn {
+            background: var(--bg-tertiary); border: 1px solid var(--border);
+            color: var(--text-secondary); padding: 5px 10px; border-radius: 14px;
+            cursor: pointer; font-size: 11px; transition: all 0.2s;
+        }
+        .quick-btn:hover { background: var(--border); color: var(--text-primary); }
+
+        /* Welcome */
+        .welcome { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
+        .welcome h2 { font-size: 22px; color: var(--text-primary); margin-bottom: 6px; }
+        .welcome p { font-size: 13px; max-width: 380px; margin: 0 auto; }
+        .welcome-features { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+        .welcome-feat { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 12px; max-width: 150px; }
+        .welcome-feat .emoji { font-size: 20px; margin-bottom: 4px; }
+
+        /* Panels (slide-in from right) */
+        .panel-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; }
+        .panel-overlay.open { display: block; }
+        .panel {
+            position: fixed; top: 0; right: -320px; width: 300px; height: 100%;
+            background: var(--bg-secondary); border-left: 1px solid var(--border);
+            z-index: 301; transition: right 0.3s ease; overflow-y: auto; padding: 20px;
+        }
+        .panel.open { right: 0; }
+        .panel h3 { font-size: 16px; margin-bottom: 16px; }
+        .panel-section { margin-bottom: 20px; }
+        .panel-section h4 { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .panel-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+        .panel-label { font-size: 13px; }
+        .panel-close { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; }
+
+        /* Toggle Switch */
+        .toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+        .toggle input { display: none; }
+        .toggle .slider {
+            position: absolute; inset: 0; background: var(--bg-tertiary);
+            border-radius: 11px; border: 1px solid var(--border); transition: 0.3s;
+        }
+        .toggle .slider::before {
+            content: ''; position: absolute; width: 16px; height: 16px;
+            left: 2px; bottom: 2px; background: var(--text-secondary);
+            border-radius: 50%; transition: 0.3s;
+        }
+        .toggle input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+        .toggle input:checked + .slider::before { transform: translateX(18px); background: white; }
+
+        /* Mobile */
+        @media (max-width: 600px) {
+            .header { padding: 10px 12px; }
+            .title { font-size: 14px; }
+            .chat-container { padding: 12px; }
+            .message-content { max-width: 85%; }
+            .input-area { padding: 10px 12px; }
+            .quick-actions { display: none; }
+            .panel { width: 100%; right: -100%; }
+            .welcome-features { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <div class="logo">🤖</div>
+            <div>
+                <div class="title">N.O.V.A</div>
+                <div class="status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Online</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-icon" id="alwaysOnBtn" onclick="toggleAlwaysOn()" title="Always-On Mode">🟢</button>
+            <button class="btn btn-icon" onclick="openPanel('settings')" title="Settings">⚙️</button>
+            <a href="/dashboard" class="btn" style="text-decoration:none">📊</a>
+            <button class="btn" onclick="newThread()">New</button>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="chat-container" id="chatContainer">
+        <div class="welcome" id="welcome">
+            <h2>👋 Hey! I'm Nova</h2>
+            <p>N.O.V.A — your personal AI study companion. I learn how you learn and adapt to help you grow.</p>
+            <div class="welcome-features">
+                <div class="welcome-feat"><div class="emoji">🎯</div>Adaptive study plans</div>
+                <div class="welcome-feat"><div class="emoji">🎤</div>Voice interaction</div>
+                <div class="welcome-feat"><div class="emoji">📈</div>Growth tracking</div>
+                <div class="welcome-feat"><div class="emoji">🔔</div>Smart reminders</div>
+            </div>
+        </div>
+        <div id="messages"></div>
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-wrapper">
+            <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="Voice Input">🎤</button>
+            <textarea class="input-field" id="messageInput" placeholder="Talk to Nova..." rows="1" autofocus></textarea>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="quickAction('Help me study for my exam')">📚 Study</button>
+            <button class="quick-btn" onclick="quickAction('Create flashcards on Python decorators')">🃏 Flashcards</button>
+            <button class="quick-btn" onclick="quickAction('Generate a quiz on data structures')">📝 Quiz</button>
+            <button class="quick-btn" onclick="quickAction('Show my pending tasks')">📋 Tasks</button>
+            <button class="quick-btn" onclick="quickAction('What should I study next?')">🎯 Recommend</button>
+            <button class="quick-btn" onclick="quickAction('Show my performance report')">📊 Progress</button>
+            <button class="quick-btn" onclick="quickAction('Show my learning profile')">🧠 Profile</button>
+            <button class="quick-btn" onclick="quickAction('Show my growth report')">📈 Growth</button>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+    <div class="panel" id="settingsPanel">
+        <button class="panel-close" onclick="closePanel()">✕</button>
+        <h3>⚙️ Settings</h3>
+
+        <div class="panel-section">
+            <h4>Always-On Mode</h4>
+            <div class="panel-row">
+                <span class="panel-label">Proactive reminders</span>
+                <label class="toggle"><input type="checkbox" id="alwaysOnToggle" onchange="toggleAlwaysOn()"><span class="slider"></span></label>
+            </div>
+            <div class="panel-row">
+                <span class="panel-label">TTS (speak replies)</span>
+                <label class="toggle"><input type="checkbox" id="ttsToggle" onchange="toggleTTS()"><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <h4>Security</h4>
+            <div class="panel-row">
+                <span class="panel-label">Voice lock</span>
+                <label class="toggle"><input type="checkbox" id="voiceLockToggle" onchange="toggleVoiceLock()"><span class="slider"></span></label>
+            </div>
+            <button class="btn" style="width:100%;margin-top:8px" onclick="setPin()">🔒 Set PIN Code</button>
+            <button class="btn" style="width:100%;margin-top:6px" onclick="manageVoices()">🎤 Manage Voices</button>
+        </div>
+
+        <div class="panel-section">
+            <h4>Notifications</h4>
+            <div class="panel-row">
+                <span class="panel-label">Reminder interval</span>
+                <select id="intervalSelect" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:4px 8px;font-size:12px" onchange="updateInterval()">
+                    <option value="15">15 min</option>
+                    <option value="30" selected>30 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="120">2 hours</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <h4>Personalization</h4>
+            <div class="panel-row">
+                <span class="panel-label">Your name</span>
+                <input id="nameInput" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:4px 8px;font-size:12px;width:120px" placeholder="e.g. Alex">
+            </div>
+            <button class="btn" style="width:100%;margin-top:8px" onclick="saveName()">Save Name</button>
+        </div>
+
+        <div class="panel-section">
+            <h4>Quiet Hours</h4>
+            <div class="panel-row">
+                <span class="panel-label">From</span>
+                <input id="quietStart" type="number" min="0" max="23" value="23" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:4px 8px;font-size:12px;width:60px">
+            </div>
+            <div class="panel-row">
+                <span class="panel-label">Until</span>
+                <input id="quietEnd" type="number" min="0" max="23" value="7" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:4px 8px;font-size:12px;width:60px">
+            </div>
+            <button class="btn" style="width:100%;margin-top:8px" onclick="saveQuietHours()">Save Quiet Hours</button>
+        </div>
+    </div>
+
+    <script>
+        // ── State ──
+        let threadId = localStorage.getItem('nova_thread_id') || '';
+        let isLoading = false;
+        let isListening = false;
+        let recognition = null;
+        let eventSource = null;
+        let alwaysOn = false;
+        let ttsEnabled = false;
+        let audioCtx = null;
+
+        const chatContainer = document.getElementById('chatContainer');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const welcome = document.getElementById('welcome');
+        const voiceBtn = document.getElementById('voiceBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // ── Init ──
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+        });
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+        // Load settings
+        loadSettings();
+        connectSSE();
+
+        // ── Chat ──
+        function addMessage(role, content) {
+            welcome.style.display = 'none';
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            if (role === 'system') {
+                div.innerHTML = `<div class="message-content">${content}</div>`;
+            } else {
+                const avatar = document.createElement('div');
+                avatar.className = 'avatar';
+                avatar.textContent = role === 'user' ? '👤' : '🤖';
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.textContent = content;
+                div.appendChild(avatar);
+                div.appendChild(contentDiv);
+            }
+            messagesDiv.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // TTS for assistant messages
+            if (role === 'assistant' && ttsEnabled && 'speechSynthesis' in window) {
+                const utter = new SpeechSynthesisUtterance(content);
+                utter.rate = 0.95;
+                utter.pitch = 1;
+                speechSynthesis.speak(utter);
+            }
+        }
+
+        function showTyping() { typingIndicator.classList.add('active'); chatContainer.scrollTop = chatContainer.scrollHeight; }
+        function hideTyping() { typingIndicator.classList.remove('active'); }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isLoading) return;
+            isLoading = true;
+            sendBtn.disabled = true;
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            addMessage('user', message);
+            showTyping();
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, thread_id: threadId }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    threadId = data.thread_id;
+                    localStorage.setItem('nova_thread_id', threadId);
+                    addMessage('assistant', data.response);
+                } else {
+                    addMessage('assistant', `⚠️ Error: ${data.error || 'Something went wrong'}`);
+                }
+            } catch (e) {
+                addMessage('assistant', `⚠️ Connection error: ${e.message}`);
+            } finally {
+                hideTyping();
+                isLoading = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        function quickAction(text) { messageInput.value = text; sendMessage(); }
+
+        async function newThread() {
+            try {
+                const resp = await fetch('/api/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                const data = await resp.json();
+                threadId = data.thread_id;
+                localStorage.setItem('nova_thread_id', threadId);
+                messagesDiv.innerHTML = '';
+                welcome.style.display = 'block';
+            } catch (e) { console.error('Failed:', e); }
+        }
+
+        // ── Voice Input (Web Speech API) ──
+        function toggleVoice() {
+            if (isListening) { stopListening(); return; }
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                addMessage('system', '⚠️ Voice input not supported in this browser. Try Chrome.');
+                return;
+            }
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                messageInput.value = transcript;
+            };
+            recognition.onend = () => { stopListening(); };
+            recognition.onerror = (e) => { stopListening(); if (e.error !== 'no-speech') addMessage('system', `Voice error: ${e.error}`); };
+
+            recognition.start();
+            isListening = true;
+            voiceBtn.classList.add('listening');
+            voiceBtn.textContent = '🔴';
+        }
+
+        function stopListening() {
+            if (recognition) { try { recognition.stop(); } catch(e) {} }
+            isListening = false;
+            voiceBtn.classList.remove('listening');
+            voiceBtn.textContent = '🎤';
+        }
+
+        // ── SSE Notifications ──
+        function connectSSE() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource('/api/notifications');
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'ping') return;
+                    showToast(data);
+                } catch (e) {}
+            };
+            eventSource.onerror = () => { statusDot.classList.add('offline'); statusText.textContent = 'Reconnecting...'; };
+            eventSource.onopen = () => { statusDot.classList.remove('offline'); statusText.textContent = 'Online'; };
+        }
+
+        function showToast(data) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<div class="toast-title">${data.title || 'Notification'}</div><div class="toast-msg">${data.message || ''}</div>`;
+            toast.onclick = () => {
+                if (data.action) { quickAction(data.action.replace(/_/g, ' ')); }
+                toast.remove();
+            };
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentNode) toast.remove(); }, 8000);
+            // Also show in chat if always-on
+            if (alwaysOn && data.type !== 'system') {
+                addMessage('system', `${data.title}: ${data.message}`);
+            }
+        }
+
+        // ── Settings Panel ──
+        function openPanel(name) { document.getElementById('panelOverlay').classList.add('open'); document.getElementById('settingsPanel').classList.add('open'); }
+        function closePanel() { document.getElementById('panelOverlay').classList.remove('open'); document.getElementById('settingsPanel').classList.remove('open'); }
+
+        async function loadSettings() {
+            try {
+                const resp = await fetch('/api/settings');
+                const s = await resp.json();
+                alwaysOn = s.always_on;
+                ttsEnabled = s.tts_enabled;
+                document.getElementById('alwaysOnToggle').checked = alwaysOn;
+                document.getElementById('ttsToggle').checked = ttsEnabled;
+                document.getElementById('alwaysOnBtn').classList.toggle('active', alwaysOn);
+                if (s.preferred_name) document.getElementById('nameInput').value = s.preferred_name;
+                if (s.quiet_hours_start !== undefined) document.getElementById('quietStart').value = s.quiet_hours_start;
+                if (s.quiet_hours_end !== undefined) document.getElementById('quietEnd').value = s.quiet_hours_end;
+                if (s.reminder_interval_min) document.getElementById('intervalSelect').value = s.reminder_interval_min;
+            } catch (e) {}
+        }
+
+        async function saveSetting(key, value) {
+            try {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [key]: value }),
+                });
+            } catch (e) {}
+        }
+
+        function toggleAlwaysOn() {
+            alwaysOn = !alwaysOn;
+            document.getElementById('alwaysOnToggle').checked = alwaysOn;
+            document.getElementById('alwaysOnBtn').classList.toggle('active', alwaysOn);
+            saveSetting('always_on', alwaysOn);
+            addMessage('system', alwaysOn ? '🟢 Always-on mode enabled. I\'ll proactively help you stay on track!' : '⚪ Always-on mode disabled.');
+        }
+
+        function toggleTTS() {
+            ttsEnabled = document.getElementById('ttsToggle').checked;
+            saveSetting('tts_enabled', ttsEnabled);
+            if (ttsEnabled && 'speechSynthesis' in window) {
+                const u = new SpeechSynthesisUtterance('Text to speech enabled. I\'ll read my replies aloud.');
+                speechSynthesis.speak(u);
+            }
+        }
+
+        function toggleVoiceLock() {
+            saveSetting('voice_lock_enabled', document.getElementById('voiceLockToggle').checked);
+            quickAction(document.getElementById('voiceLockToggle').checked ? 'Enable voice lock' : 'Disable voice lock');
+        }
+
+        function setPin() {
+            const pin = prompt('Enter a 4-8 digit PIN:');
+            if (pin) quickAction(`Set PIN code: ${pin}`);
+        }
+
+        function manageVoices() { quickAction('Show voice security status'); }
+
+        async function updateInterval() {
+            const val = document.getElementById('intervalSelect').value;
+            await saveSetting('reminder_interval_min', parseInt(val));
+        }
+
+        function saveName() {
+            const name = document.getElementById('nameInput').value.trim();
+            if (name) { saveSetting('preferred_name', name); quickAction(`Call me ${name}`); }
+        }
+
+        function saveQuietHours() {
+            const start = parseInt(document.getElementById('quietStart').value);
+            const end = parseInt(document.getElementById('quietEnd').value);
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quiet_hours_start: start, quiet_hours_end: end }),
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>N.O.V.A — Learning Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --bg-card: #14141e;
+            --text-primary: #e8e8f0;
+            --text-secondary: #9090a0;
+            --accent: #00d4ff;
+            --accent-dim: #00a0cc;
+            --border: #2a2a35;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4444;
+            --purple: #a855f7;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky; top: 0; z-index: 100;
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), #0066ff);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        .title { font-size: 18px; font-weight: 600; }
+        .subtitle { font-size: 12px; color: var(--text-secondary); }
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 8px 16px; border-radius: 8px;
+            cursor: pointer; font-size: 13px;
+            transition: all 0.2s; text-decoration: none;
+        }
+        .btn:hover { background: var(--border); color: var(--text-primary); }
+        .btn-accent { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
+        .header-actions { display: flex; gap: 8px; }
+
+        .dashboard { padding: 20px; max-width: 1200px; margin: 0 auto; }
+
+        /* Stats Row */
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* Chart Cards */
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .chart-card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        .chart-card canvas { width: 100% !important; max-height: 260px; }
+
+        /* Method Rankings */
+        .method-list { list-style: none; }
+        .method-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .method-item:last-child { border-bottom: none; }
+        .method-rank {
+            width: 28px; height: 28px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 600;
+            flex-shrink: 0;
+        }
+        .method-name { flex: 1; font-size: 14px; }
+        .method-bar-bg {
+            width: 120px; height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .method-bar {
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--success));
+            transition: width 0.5s;
+        }
+        .method-score { font-size: 13px; color: var(--text-secondary); width: 40px; text-align: right; }
+        .method-n { font-size: 11px; color: var(--text-secondary); width: 30px; text-align: right; }
+
+        /* Weak Topics */
+        .weak-topic {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .weak-topic:last-child { border-bottom: none; }
+        .weak-score {
+            font-size: 20px; font-weight: 700;
+            width: 60px; text-align: center;
+        }
+        .weak-score.low { color: var(--error); }
+        .weak-score.mid { color: var(--warning); }
+        .weak-score.high { color: var(--success); }
+
+        /* Streak */
+        .streak-card {
+            background: linear-gradient(135deg, #1a1030, #0a0a0f);
+            border: 1px solid var(--purple);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .streak-number { font-size: 48px; font-weight: 800; color: var(--purple); }
+        .streak-label { font-size: 14px; color: var(--text-secondary); }
+        .streak-best { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+        /* Bandit Suggestions */
+        .suggestion-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 8px;
+        }
+        .suggestion-card .method-tag {
+            display: inline-block;
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--accent);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .suggestion-card .score { font-size: 22px; font-weight: 700; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state h2 { color: var(--text-primary); margin-bottom: 8px; }
+        .empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+        /* Period Selector */
+        .period-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+        .period-tab {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .period-tab.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
+
+        /* Full-width section */
+        .full-width { grid-column: 1 / -1; }
+
+        @media (max-width: 600px) {
+            .dashboard { padding: 12px; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .stat-value { font-size: 22px; }
+            .header { padding: 10px 12px; }
+            .title { font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <div class="logo">📊</div>
+            <div>
+                <div class="title">Learning Analytics</div>
+                <div class="subtitle">Performance dashboard</div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="btn">💬 Chat</a>
+            <button class="btn" onclick="location.reload()">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <!-- Period Selector -->
+        <div class="period-tabs">
+            <button class="period-tab" data-days="7">7 days</button>
+            <button class="period-tab active" data-days="30">30 days</button>
+            <button class="period-tab" data-days="90">90 days</button>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row" id="statsRow">
+            <div class="stat-card">
+                <div class="stat-label">🔥 Study Streak</div>
+                <div class="stat-value" id="statStreak">—</div>
+                <div class="stat-sub" id="statStreakSub">days in a row</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📚 Sessions</div>
+                <div class="stat-value" id="statSessions">—</div>
+                <div class="stat-sub" id="statSessionsSub">study sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">⏱️ Study Time</div>
+                <div class="stat-value" id="statTime">—</div>
+                <div class="stat-sub" id="statTimeSub">minutes total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📈 Avg Quiz Score</div>
+                <div class="stat-value" id="statQuizScore">—</div>
+                <div class="stat-sub" id="statQuizSub">across all quizzes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📝 Quizzes Taken</div>
+                <div class="stat-value" id="statQuizzes">—</div>
+                <div class="stat-sub">total attempts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🃏 Card Reviews</div>
+                <div class="stat-value" id="statReviews">—</div>
+                <div class="stat-sub">flashcard reviews</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-grid">
+            <!-- Progress Over Time -->
+            <div class="chart-card">
+                <h3>📈 Quiz Score Progress</h3>
+                <canvas id="progressChart"></canvas>
+            </div>
+
+            <!-- Topic Time Distribution -->
+            <div class="chart-card">
+                <h3>📂 Study Time by Topic</h3>
+                <canvas id="topicChart"></canvas>
+            </div>
+
+            <!-- Method Effectiveness -->
+            <div class="chart-card">
+                <h3>🎯 Method Effectiveness</h3>
+                <canvas id="methodChart"></canvas>
+            </div>
+
+            <!-- Bandit Rankings -->
+            <div class="chart-card">
+                <h3>🤖 Bandit Recommendations</h3>
+                <div id="banditSuggestions"></div>
+            </div>
+
+            <!-- Method Rankings List -->
+            <div class="chart-card">
+                <h3>📊 Method Rankings (All)</h3>
+                <ul class="method-list" id="methodRankings"></ul>
+            </div>
+
+            <!-- Weak Topics -->
+            <div class="chart-card">
+                <h3>⚠️ Weak Topics (Need Review)</h3>
+                <div id="weakTopics"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDays = 30;
+        let charts = {};
+
+        // Chart.js global config
+        Chart.defaults.color = '#9090a0';
+        Chart.defaults.borderColor = '#2a2a35';
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, sans-serif';
+
+        const COLORS = ['#00d4ff', '#00ff88', '#ffaa00', '#a855f7', '#ff4444', '#0066ff', '#ff6699', '#66ffcc'];
+
+        // ── Data Fetching ──
+
+        async function fetchJSON(url) {
+            const resp = await fetch(url);
+            return resp.json();
+        }
+
+        async function loadDashboard(days) {
+            currentDays = days;
+            const [overview, topics, methods, progress, streak, weak, rankings, suggestions] = await Promise.all([
+                fetchJSON(`/api/analytics/overview?days=${days}`),
+                fetchJSON(`/api/analytics/topics?days=${days}`),
+                fetchJSON(`/api/analytics/methods?days=${days}`),
+                fetchJSON(`/api/analytics/progress?days=${days}`),
+                fetchJSON('/api/analytics/streak'),
+                fetchJSON('/api/analytics/weak-topics'),
+                fetchJSON('/api/analytics/bandit/rankings'),
+                fetchJSON('/api/analytics/bandit/suggest'),
+            ]);
+
+            renderStats(overview, streak);
+            renderProgressChart(progress);
+            renderTopicChart(topics);
+            renderMethodChart(methods);
+            renderMethodRankings(rankings);
+            renderWeakTopics(weak);
+            renderBanditSuggestions(suggestions);
+        }
+
+        // ── Render Functions ──
+
+        function renderStats(overview, streak) {
+            document.getElementById('statStreak').textContent = streak.current_streak || '0';
+            document.getElementById('statStreakSub').textContent = `best: ${streak.longest_streak || 0}`;
+            document.getElementById('statSessions').textContent = overview.total_sessions || '0';
+            document.getElementById('statTime').textContent = overview.total_study_minutes || '0';
+            document.getElementById('statQuizScore').textContent = (overview.avg_quiz_score || 0) + '%';
+            document.getElementById('statQuizzes').textContent = overview.total_quizzes || '0';
+            document.getElementById('statReviews').textContent = overview.total_flashcard_reviews || '0';
+        }
+
+        function renderProgressChart(data) {
+            if (charts.progress) charts.progress.destroy();
+            const canvas = document.getElementById('progressChart');
+            if (!data.length) {
+                canvas.style.display = 'none';
+                return;
+            }
+            canvas.style.display = 'block';
+            charts.progress = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.day.slice(5)),
+                    datasets: [{
+                        label: 'Avg Quiz Score %',
+                        data: data.map(d => d.avg_score),
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#00d4ff',
+                    }, {
+                        label: 'Quizzes',
+                        data: data.map(d => d.quizzes),
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        fill: false,
+                        tension: 0.4,
+                        yAxisID: 'y1',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { boxWidth: 12 } } },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, title: { display: true, text: 'Score %' } },
+                        y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Count' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+
+        function renderTopicChart(data) {
+            if (charts.topic) charts.topic.destroy();
+            const canvas = document.getElementById('topicChart');
+            if (!data.length) {
+                canvas.style.display = 'none';
+                return;
+            }
+            canvas.style.display = 'block';
+            charts.topic = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(d => d.topic),
+                    datasets: [{
+                        data: data.map(d => d.minutes),
+                        backgroundColor: COLORS.slice(0, data.length),
+                        borderColor: '#14141e',
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, padding: 8 } }
+                    }
+                }
+            });
+        }
+
+        function renderMethodChart(data) {
+            if (charts.method) charts.method.destroy();
+            const canvas = document.getElementById('methodChart');
+            if (!data.length) {
+                canvas.style.display = 'none';
+                return;
+            }
+            canvas.style.display = 'block';
+            charts.method = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.method.replace(/_/g, ' ')),
+                    datasets: [{
+                        label: 'Avg Reward',
+                        data: data.map(d => d.avg_reward * 100),
+                        backgroundColor: data.map((d, i) => COLORS[i % COLORS.length] + '99'),
+                        borderColor: data.map((d, i) => COLORS[i % COLORS.length]),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, max: 100, title: { display: true, text: 'Success %' } }
+                    }
+                }
+            });
+        }
+
+        function renderMethodRankings(data) {
+            const el = document.getElementById('methodRankings');
+            if (!data.length) {
+                el.innerHTML = '<li style="padding:20px;color:var(--text-secondary);text-align:center">No data yet — start tracking study sessions!</li>';
+                return;
+            }
+            el.innerHTML = data.map((m, i) => {
+                const name = m.method.replace(/_/g, ' ');
+                const pct = (m.mean * 100).toFixed(0);
+                const n = m.pulls;
+                const status = n >= 10 ? '✅' : n >= 5 ? '📊' : '🔬';
+                return `<li class="method-item">
+                    <div class="method-rank">${i + 1}</div>
+                    <div class="method-name">${status} ${name}</div>
+                    <div class="method-bar-bg"><div class="method-bar" style="width:${pct}%"></div></div>
+                    <div class="method-score">${pct}%</div>
+                    <div class="method-n">n=${n}</div>
+                </li>`;
+            }).join('');
+        }
+
+        function renderWeakTopics(data) {
+            const el = document.getElementById('weakTopics');
+            if (!data.length) {
+                el.innerHTML = '<div style="padding:20px;color:var(--text-secondary);text-align:center">No quiz data yet — take some quizzes!</div>';
+                return;
+            }
+            el.innerHTML = data.map(t => {
+                const score = t.avg_score || 0;
+                const cls = score < 50 ? 'low' : score < 75 ? 'mid' : 'high';
+                return `<div class="weak-topic">
+                    <div class="weak-score ${cls}">${score}%</div>
+                    <div style="flex:1">
+                        <div style="font-size:14px">${t.topic}</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">${t.attempts} quiz attempt${t.attempts !== 1 ? 's' : ''}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderBanditSuggestions(data) {
+            const el = document.getElementById('banditSuggestions');
+            if (!data.length) {
+                el.innerHTML = '<div style="padding:20px;color:var(--text-secondary);text-align:center">No bandit data yet — start studying!</div>';
+                return;
+            }
+            el.innerHTML = data.map((m, i) => {
+                const name = m.method.replace(/_/g, ' ');
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+                return `<div class="suggestion-card">
+                    <div class="method-tag">${medal} ${name}</div>
+                    <div class="score">${(m.mean * 100).toFixed(0)}%</div>
+                    <div style="font-size:12px;color:var(--text-secondary)">
+                        sampled: ${m.sampled_value.toFixed(3)} · ${m.pulls} past uses
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ── Period Selector ──
+        document.querySelectorAll('.period-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                loadDashboard(parseInt(tab.dataset.days));
+            });
+        });
+
+        // ── Init ──
+        loadDashboard(30);
+    </script>
+</body>
+</html>
