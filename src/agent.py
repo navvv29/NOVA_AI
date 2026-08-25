@@ -146,6 +146,7 @@ def _build_checkpointer():
             conn.autocommit = True
             from langgraph.checkpoint.postgres import PostgresSaver
             saver = PostgresSaver(conn)
+            saver.setup()
             print("[OK] Connected to PostgreSQL for persistent memory.")
             return saver
         except Exception as e:
