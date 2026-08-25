@@ -18,7 +18,6 @@ from typing import Annotated
 from typing_extensions import TypedDict
 
 from langchain_core.messages import BaseMessage, SystemMessage
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -26,9 +25,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from .llm import get_llm
 from .tools import TOOLS
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/nova")
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/nova")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 SYSTEM_PROMPT = """You are N.O.V.A — Navaneed's Operational Virtual Assistant. You are a warm, gentle, and deeply caring AI study companion built for a CS/Engineering student. Your name is Nova. You speak with a soft, calm, and reassuring tone — like a patient mentor who genuinely believes in the user's potential.
 
@@ -140,8 +137,26 @@ def call_model(state: AgentState) -> dict:
     return {"messages": [response]}
 
 
-# Module-level checkpointer so the DB stays open for the process lifetime.
-_checkpointer = PostgresSaver.from_conn_string(DATABASE_URL)
+# Try PostgreSQL for persistent memory; fall back to in-memory if unavailable.
+def _build_checkpointer():
+    if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
+        try:
+            import psycopg
+            conn = psycopg.connect(DATABASE_URL, connect_timeout=5)
+            conn.autocommit = True
+            from langgraph.checkpoint.postgres import PostgresSaver
+            saver = PostgresSaver(conn)
+            print("[OK] Connected to PostgreSQL for persistent memory.")
+            return saver
+        except Exception as e:
+            print(f"[WARN] PostgreSQL unavailable ({e}). Using in-memory mode.")
+    else:
+        print("[INFO] No DATABASE_URL set. Using in-memory mode.")
+    from langgraph.checkpoint.memory import MemorySaver
+    return MemorySaver()
+
+
+_checkpointer = _build_checkpointer()
 
 
 def build_graph():
