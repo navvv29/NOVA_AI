@@ -494,7 +494,17 @@
                 messageInput.value = transcript;
             };
             recognition.onend = () => { stopListening(); };
-            recognition.onerror = (e) => { stopListening(); if (e.error !== 'no-speech') addMessage('system', `Voice error: ${e.error}`); };
+            recognition.onerror = (e) => {
+                stopListening();
+                if (e.error === 'no-speech') return;
+                if (e.error === 'network') {
+                    addMessage('system', 'Voice needs Google servers. Use Chrome or Edge for voice, or just type — I respond great to text too!');
+                } else if (e.error === 'not-allowed') {
+                    addMessage('system', 'Microphone access denied. Please allow microphone access in your browser settings.');
+                } else {
+                    addMessage('system', `Voice error: ${e.error}. Try typing instead.`);
+                }
+            };
 
             recognition.start();
             isListening = true;
