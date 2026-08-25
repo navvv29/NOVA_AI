@@ -576,7 +576,11 @@
             speechSynthesis.speak(u);
         }
 
-        // Continuous voice recognition
+        // Continuous voice recognition (debounce-based)
+        let speakTimeout = null;
+        let lastSpeechTime = 0;
+        const SPEAK_DELAY = 1500; // 1.5s of silence = send
+
         function startVoiceMode() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 addMessage('system', 'Voice needs Chrome or Edge.');
@@ -584,10 +588,9 @@
             }
             voiceMode = true;
             voiceBtn.classList.add('listening');
-            chatSubtitle.textContent = 'Voice mode active — speak anytime';
+            chatSubtitle.textContent = 'Listening...';
             startListening();
             startClapDetection();
-            // Request notification permission
             if ('Notification' in window && Notification.permission === 'default') {
                 Notification.requestPermission();
             }
@@ -602,60 +605,95 @@
             if (audioContext) { audioContext.close(); audioContext = null; }
             speechSynthesis.cancel();
             ttsSpeaking = false;
+            if (speakTimeout) { clearTimeout(speakTimeout); speakTimeout = null; }
         }
 
         function startListening() {
-            if (!voiceMode) return;
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SR();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'en-US';
-            let finalTranscript = '';
+            if (!voiceMode || isListening) return;
+            try {
+                const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SR();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+                let transcript = '';
+                let hasFinal = false;
 
-            recognition.onresult = (e) => {
-                let interim = '';
-                for (let i = e.resultIndex; i < e.results.length; i++) {
-                    if (e.results[i].isFinal) {
-                        finalTranscript += e.results[i][0].transcript;
-                    } else {
-                        interim += e.results[i][0].transcript;
+                recognition.onresult = (e) => {
+                    let interim = '';
+                    for (let i = e.resultIndex; i < e.results.length; i++) {
+                        if (e.results[i].isFinal) {
+                            transcript += e.results[i][0].transcript + ' ';
+                            hasFinal = true;
+                        } else {
+                            interim += e.results[i][0].transcript;
+                        }
                     }
-                }
-                messageInput.value = finalTranscript || interim;
-            };
+                    messageInput.value = transcript.trim() || interim;
 
-            recognition.onend = () => {
-                if (!voiceMode) return;
-                if (finalTranscript.trim()) {
-                    // Auto-send after a pause
-                    messageInput.value = finalTranscript.trim();
-                    sendMessage(() => {
-                        // After Nova responds, start listening again
-                        setTimeout(() => {
-                            if (voiceMode && !ttsSpeaking) startListening();
-                        }, 500);
-                    });
-                    finalTranscript = '';
-                } else {
-                    // No speech detected, restart listening
-                    setTimeout(() => { if (voiceMode) startListening(); }, 200);
-                }
-            };
+                    // Debounce: when user stops speaking for 1.5s, auto-send
+                    if (hasFinal) {
+                        lastSpeechTime = Date.now();
+                        if (speakTimeout) clearTimeout(speakTimeout);
+                        speakTimeout = setTimeout(() => {
+                            const text = transcript.trim();
+                            transcript = '';
+                            hasFinal = false;
+                            if (text && voiceMode && !isLoading) {
+                                messageInput.value = text;
+                                sendMessage(() => {
+                                    setTimeout(() => {
+                                        if (voiceMode && !ttsSpeaking) startListening();
+                                    }, 400);
+                                });
+                            } else {
+                                restartListening();
+                            }
+                        }, SPEAK_DELAY);
+                    }
+                };
 
-            recognition.onerror = (e) => {
-                if (!voiceMode) return;
-                if (e.error === 'no-speech' || e.error === 'aborted') {
-                    setTimeout(() => { if (voiceMode) startListening(); }, 200);
-                } else if (e.error === 'network') {
-                    addMessage('system', 'Voice needs Chrome or Edge.');
-                } else {
-                    setTimeout(() => { if (voiceMode) startListening(); }, 500);
-                }
-            };
+                recognition.onend = () => {
+                    isListening = false;
+                    if (!voiceMode) return;
+                    // If we have pending text and enough silence, send it
+                    if (transcript.trim() && Date.now() - lastSpeechTime > 800) {
+                        const text = transcript.trim();
+                        transcript = '';
+                        hasFinal = false;
+                        if (speakTimeout) { clearTimeout(speakTimeout); speakTimeout = null; }
+                        if (text && !isLoading) {
+                            messageInput.value = text;
+                            sendMessage(() => {
+                                setTimeout(() => {
+                                    if (voiceMode && !ttsSpeaking) startListening();
+                                }, 400);
+                            });
+                            return;
+                        }
+                    }
+                    restartListening();
+                };
 
-            try { recognition.start(); } catch(e) {}
-            isListening = true;
+                recognition.onerror = (e) => {
+                    isListening = false;
+                    if (!voiceMode) return;
+                    if (e.error === 'network') {
+                        addMessage('system', 'Voice needs Chrome or Edge.');
+                    } else {
+                        restartListening();
+                    }
+                };
+
+                recognition.start();
+                isListening = true;
+                chatSubtitle.textContent = 'Listening...';
+            } catch(e) {}
+        }
+
+        function restartListening() {
+            isListening = false;
+            if (voiceMode) setTimeout(() => startListening(), 300);
         }
 
         // Override sendMessage to support callback
