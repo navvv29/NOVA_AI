@@ -550,39 +550,198 @@
             } catch (e) {}
         }
 
-        // ── Voice ──
-        function toggleVoice() {
-            if (isListening) { stopListening(); return; }
+        // ── Voice Conversation Mode (JARVIS-style) ──
+        let voiceMode = false;
+        let audioContext = null;
+        let analyser = null;
+        let micStream = null;
+        let clapDetected = false;
+        let ttsSpeaking = false;
+
+        // TTS with callback
+        function speak(text, onDone) {
+            if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.rate = 0.92;
+            u.pitch = 1.0;
+            u.volume = 1.0;
+            // Pick a soft female voice if available
+            const voices = speechSynthesis.getVoices();
+            const soft = voices.find(v => /samantha|zira|karen|google.*female|google.*uk/i.test(v.name));
+            if (soft) u.voice = soft;
+            ttsSpeaking = true;
+            u.onend = () => { ttsSpeaking = false; if (onDone) onDone(); };
+            u.onerror = () => { ttsSpeaking = false; if (onDone) onDone(); };
+            speechSynthesis.speak(u);
+        }
+
+        // Continuous voice recognition
+        function startVoiceMode() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                addMessage('system', 'Voice needs Chrome or Edge. You can type to me perfectly!');
+                addMessage('system', 'Voice needs Chrome or Edge.');
                 return;
             }
+            voiceMode = true;
+            voiceBtn.classList.add('listening');
+            chatSubtitle.textContent = 'Voice mode active — speak anytime';
+            startListening();
+            startClapDetection();
+            // Request notification permission
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        function stopVoiceMode() {
+            voiceMode = false;
+            stopListening();
+            voiceBtn.classList.remove('listening');
+            chatSubtitle.textContent = 'Ready to assist';
+            if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+            if (audioContext) { audioContext.close(); audioContext = null; }
+            speechSynthesis.cancel();
+            ttsSpeaking = false;
+        }
+
+        function startListening() {
+            if (!voiceMode) return;
             const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SR();
-            recognition.continuous = false;
+            recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-US';
+            let finalTranscript = '';
+
             recognition.onresult = (e) => {
-                let t = '';
-                for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
-                messageInput.value = t;
+                let interim = '';
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    if (e.results[i].isFinal) {
+                        finalTranscript += e.results[i][0].transcript;
+                    } else {
+                        interim += e.results[i][0].transcript;
+                    }
+                }
+                messageInput.value = finalTranscript || interim;
             };
-            recognition.onend = () => stopListening();
+
+            recognition.onend = () => {
+                if (!voiceMode) return;
+                if (finalTranscript.trim()) {
+                    // Auto-send after a pause
+                    messageInput.value = finalTranscript.trim();
+                    sendMessage(() => {
+                        // After Nova responds, start listening again
+                        setTimeout(() => {
+                            if (voiceMode && !ttsSpeaking) startListening();
+                        }, 500);
+                    });
+                    finalTranscript = '';
+                } else {
+                    // No speech detected, restart listening
+                    setTimeout(() => { if (voiceMode) startListening(); }, 200);
+                }
+            };
+
             recognition.onerror = (e) => {
-                stopListening();
-                if (e.error === 'no-speech') return;
-                if (e.error === 'network') addMessage('system', 'Voice needs Chrome or Edge. Type works great too!');
-                else addMessage('system', `Voice error: ${e.error}`);
+                if (!voiceMode) return;
+                if (e.error === 'no-speech' || e.error === 'aborted') {
+                    setTimeout(() => { if (voiceMode) startListening(); }, 200);
+                } else if (e.error === 'network') {
+                    addMessage('system', 'Voice needs Chrome or Edge.');
+                } else {
+                    setTimeout(() => { if (voiceMode) startListening(); }, 500);
+                }
             };
-            recognition.start();
+
+            try { recognition.start(); } catch(e) {}
             isListening = true;
-            voiceBtn.classList.add('listening');
         }
-        function stopListening() {
-            if (recognition) try { recognition.stop(); } catch(e) {}
-            isListening = false;
-            voiceBtn.classList.remove('listening');
+
+        // Override sendMessage to support callback
+        const _origSend = sendMessage;
+        sendMessage = function(callback) {
+            const message = messageInput.value.trim();
+            if (!message || isLoading) return;
+            isLoading = true;
+            sendBtn.disabled = true;
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            addMessage('user', message);
+            showTyping();
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, thread_id: threadId }),
+            }).then(r => r.json()).then(data => {
+                if (data.thread_id) {
+                    threadId = data.thread_id;
+                    localStorage.setItem('nova_thread_id', threadId);
+                }
+                addMessage('assistant', data.response || data.error);
+                // Speak the response in voice mode
+                if (voiceMode && data.response) {
+                    speak(data.response, () => {
+                        if (callback) callback();
+                        else if (voiceMode) setTimeout(() => startListening(), 300);
+                    });
+                    // Send phone notification
+                    sendNotification('Nova', data.response.substring(0, 100));
+                } else if (callback) {
+                    callback();
+                }
+            }).catch(e => {
+                addMessage('system', `Connection error: ${e.message}`);
+                if (callback) callback();
+            }).finally(() => {
+                hideTyping();
+                isLoading = false;
+                sendBtn.disabled = false;
+                if (!voiceMode) messageInput.focus();
+            });
+        };
+
+        // ── Clap Detection ──
+        function startClapDetection() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                micStream = stream;
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                analyser.fftSize = 256;
+                const data = new Uint8Array(analyser.frequencyBinCount);
+                let lastClapTime = 0;
+
+                function checkClap() {
+                    if (!voiceMode) return;
+                    analyser.getByteFrequencyData(data);
+                    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+                    const now = Date.now();
+                    // Clap = sudden loud spike (>80) with cooldown
+                    if (avg > 80 && now - lastClapTime > 2000) {
+                        lastClapTime = now;
+                        // Wake up Nova
+                        if (ttsSpeaking) speechSynthesis.cancel();
+                        if (!isListening) startListening();
+                        chatSubtitle.textContent = 'Clap detected — listening...';
+                    }
+                    requestAnimationFrame(checkClap);
+                }
+                checkClap();
+            }).catch(() => {});
         }
+
+        // ── Phone Notifications ──
+        function sendNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body, icon: '/icon-192.png', badge: '/icon-192.png' });
+            }
+        }
+
+        // Preload voices for TTS
+        if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); speechSynthesis.getVoices(); }
 
         // ── SSE ──
         function connectSSE() {
@@ -623,7 +782,13 @@
             alwaysOn = !alwaysOn;
             document.getElementById('alwaysOnBtn').classList.toggle('active', alwaysOn);
             fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({always_on: alwaysOn}) });
-            addMessage('system', alwaysOn ? '⚡ Always-on mode enabled. I\'ll proactively help you stay on track.' : 'Always-on mode disabled.');
+            if (alwaysOn) {
+                startVoiceMode();
+                addMessage('system', '⚡ Always-on mode enabled. I\'m listening. Speak to me anytime. Clap to wake me up.');
+            } else {
+                stopVoiceMode();
+                addMessage('system', 'Always-on mode disabled. Voice mode stopped.');
+            }
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
