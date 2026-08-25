@@ -27,6 +27,8 @@ def _build_gemini() -> ChatGoogleGenerativeAI:
         model=os.getenv("GEMINI_MODEL", "gemini-flash-latest"),
         google_api_key=api_key,
         temperature=0.3,
+        timeout=30,
+        max_retries=2,
     )
 
 
@@ -38,7 +40,7 @@ def _build_groq() -> ChatGroq:
             "https://console.groq.com/keys and add it to .env"
         )
     return ChatGroq(
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
         api_key=api_key,
         temperature=0.3,
     )

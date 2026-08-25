@@ -144,6 +144,9 @@ def _build_checkpointer():
             import psycopg
             conn = psycopg.connect(DATABASE_URL, connect_timeout=5)
             conn.autocommit = True
+            # Disable prepared statements for Supabase/PgBouncer
+            if "pooler.supabase.com" in DATABASE_URL:
+                conn.prepare_threshold = 0
             from langgraph.checkpoint.postgres import PostgresSaver
             saver = PostgresSaver(conn)
             saver.setup()
